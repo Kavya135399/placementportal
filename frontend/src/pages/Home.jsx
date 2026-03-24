@@ -4,7 +4,10 @@ import { Link } from "react-router-dom";
 import heroImg from "../assets/hero.jpeg";       // top-left illustration
 import jobsImg from "../assets/job1.jpeg";       // bottom-right illustration
 import "../App.css";
-import "../pages/Student/Student.css";          // corrected CSS path
+import "../pages/Student/Student.css";    // corrected CSS path
+
+
+
 
 export default function HomePage() {
   const [active, setActive] = useState("home");
@@ -20,7 +23,7 @@ export default function HomePage() {
     {
       title: "Company Panel",
       desc: "Post jobs, shortlist candidates, and manage recruitment.",
-      link: "/login",
+      link: "/company/login",
       buttonText: "Login",
       buttonColor: "bg-blue-600 hover:bg-blue-700",
     },

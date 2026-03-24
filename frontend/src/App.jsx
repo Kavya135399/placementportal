@@ -13,6 +13,9 @@ import UploadResume from "./pages/Student/UploadResume";
 import ScheduleInterview from "./pages/Student/ScheduleInterview";
 import ProtectedRoute from "./components/ProtectedRoute";
 import "./pages/Student/Student.css";
+import CompanyLogin from "./pages/Company/CompanyLogin";
+import CompanyRegister from "./pages/Company/CompanyRegister";
+import CompanyDashboard from "./pages/Company/CompanyDashboard";
 
 function App() {
   return (
@@ -45,6 +48,11 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/company/login" element={<CompanyLogin />} />
+        <Route path="/company/register" element={<CompanyRegister />} />
+        <Route path="/company/dashboard" element={<CompanyDashboard />} />
+
+
 
         {/* Protected Student Routes */}
         <Route
