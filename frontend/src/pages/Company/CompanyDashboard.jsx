@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import CompanyName from "../Company/CompanyName.jsx";
 
-// Helper to format date strings (e.g., "2026-03-10")
+// Helper to format date strings
 const formatDate = (dateString) => {
   if (!dateString) return "";
   const date = new Date(dateString);
@@ -39,13 +40,16 @@ const Modal = ({ title, onClose, children }) => (
   </div>
 );
 
-export default function Dashboard() {
+export default function CompanyDashboard() {
+  const navigate = useNavigate();
+
+  // State
   const [activeTab, setActiveTab] = useState("overview");
   const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
   const [interviews, setInterviews] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
+  
   // Modals
   const [showJobModal, setShowJobModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
@@ -53,45 +57,84 @@ export default function Dashboard() {
   const [filterStatus, setFilterStatus] = useState("All");
 
   // Forms
-  const [jobForm, setJobForm] = useState({ title: "", department: "", location: "", type: "Full-time", description: "" });
-  const [intForm, setIntForm] = useState({ candidateName: "", job: "", date: "", time: "", interviewer: "", mode: "Video Call", link: "" });
+  const [jobForm, setJobForm] = useState({ 
+  title: "", 
+  department: "", 
+  location: "", 
+  type: "Full-time", 
+  description: "" 
+});
 
+const [intForm, setIntForm] = useState({ 
+  candidateName: "", 
+  job: "", 
+  date: "", 
+  time: "", 
+  interviewer: "", 
+  mode: "Video Call", 
+  link: "" 
+});
   const API_URL = "http://localhost:5000/api";
 
-  // --- DATA FETCHING ---
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [jobsRes, appsRes, intsRes] = await Promise.all([
-          fetch(`${API_URL}/jobs`).then(res => res.json()),
-          fetch(`${API_URL}/applications`).then(res => res.json()),
-          fetch(`${API_URL}/interviews`).then(res => res.json())
-        ]);
-        
-        setJobs(jobsRes);
-        setApplications(appsRes);
-        setInterviews(intsRes);
-      } catch (error) {
-        console.error("Failed to fetch data:", error);
-      }
-    };
-    fetchData();
-  }, []);
-
-  // --- STATS ---
-  const stats = [
-    { label: "Open Positions", value: jobs.filter(j => j.status === "Open").length, icon: "💼", color: "bg-blue-50 border-blue-200" },
-    { label: "Total Applications", value: applications.length, icon: "📋", color: "bg-purple-50 border-purple-200" },
-    { label: "Shortlisted", value: applications.filter(a => a.status === "Shortlisted" || a.status === "Interview Scheduled").length, icon: "⭐", color: "bg-yellow-50 border-yellow-200" },
-    { label: "Selected", value: applications.filter(a => a.status === "Selected").length, icon: "✅", color: "bg-green-50 border-green-200" },
-  ];
-
+  // Define navItems inside component
   const navItems = [
     { id: "overview", label: "Overview", icon: "🏠" },
     { id: "jobs", label: "Job Openings", icon: "💼" },
     { id: "applications", label: "Applications", icon: "📋" },
     { id: "shortlist", label: "Shortlisted", icon: "⭐" },
     { id: "interviews", label: "Interviews", icon: "📅" },
+  ];
+
+  // --- HELPER: GET TOKEN & HEADERS ---
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("token");
+    return {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    };
+  };
+
+  // --- DATA FETCHING ---
+  useEffect(() => {
+    const fetchData = async () => {
+      const token = localStorage.getItem("token");
+      
+      // 1. Agar token nahi hai, sidha login pe bhejo
+      if (!token) {
+        navigate("/company/login");
+        return;
+      }
+
+      try {
+        // 2. Fetch Data with Headers
+        const headers = getAuthHeaders();
+        
+        const [jobsRes, appsRes, intsRes] = await Promise.all([
+          fetch(`${API_URL}/jobs`, { headers }).then(res => res.json()),
+          fetch(`${API_URL}/applications`, { headers }).then(res => res.json()),
+          fetch(`${API_URL}/interviews`, { headers }).then(res => res.json())
+        ]);
+
+        // 3. Check if data is valid array (Prevents Crash)
+        if (Array.isArray(jobsRes)) setJobs(jobsRes);
+        if (Array.isArray(appsRes)) setApplications(appsRes);
+        if (Array.isArray(intsRes)) setInterviews(intsRes);
+
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+        // Agar error aaye toh login pe redirect karo
+        navigate("/company/login");
+      }
+    };
+    fetchData();
+  }, [navigate]);
+
+  // --- STATS CALCULATION (Safe) ---
+  const stats = [
+    { label: "Open Positions", value: jobs.filter(j => j.status === "Open").length, icon: "💼", color: "bg-blue-50 border-blue-200" },
+    { label: "Total Applications", value: applications.length, icon: "📋", color: "bg-purple-50 border-purple-200" },
+    { label: "Shortlisted", value: applications.filter(a => a.status === "Shortlisted" || a.status === "Interview Scheduled").length, icon: "⭐", color: "bg-yellow-50 border-yellow-200" },
+    { label: "Selected", value: applications.filter(a => a.status === "Selected").length, icon: "✅", color: "bg-green-50 border-green-200" },
   ];
 
   // --- ACTIONS ---
@@ -102,11 +145,11 @@ export default function Dashboard() {
     try {
       const res = await fetch(`${API_URL}/jobs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify(jobForm)
       });
       const newJob = await res.json();
-      setJobs(prev => [...prev, newJob]);
+      if (newJob._id) setJobs(prev => [...prev, newJob]); // Only add if valid
       setJobForm({ title: "", department: "", location: "", type: "Full-time", description: "" });
       setShowJobModal(false);
     } catch (err) {
@@ -119,7 +162,7 @@ export default function Dashboard() {
     try {
       await fetch(`${API_URL}/applications/${appId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ status: newStatus })
       });
       
@@ -133,26 +176,21 @@ export default function Dashboard() {
   // 3. Schedule Interview
   async function scheduleInterview() {
     if (!intForm.candidateName || !intForm.date) return;
-    
-    // Find the application to link it
     const app = applications.find(a => a.name === intForm.candidateName);
     
     try {
       const res = await fetch(`${API_URL}/interviews`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...intForm,
-          applicationId: app ? app._id : null
-        })
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ ...intForm, applicationId: app ? app._id : null })
       });
       const newInterview = await res.json();
       
-      setInterviews(prev => [...prev, newInterview]);
-      
-      // Update local application status
-      if (app) {
-        setApplications(prev => prev.map(a => a._id === app._id ? {...a, status: "Interview Scheduled"} : a));
+      if (newInterview._id) {
+        setInterviews(prev => [...prev, newInterview]);
+        if (app) {
+          setApplications(prev => prev.map(a => a._id === app._id ? {...a, status: "Interview Scheduled"} : a));
+        }
       }
       
       setIntForm({ candidateName: "", job: "", date: "", time: "", interviewer: "", mode: "Video Call", link: "" });
@@ -166,11 +204,12 @@ export default function Dashboard() {
   async function toggleJobStatus(id) {
     try {
       const res = await fetch(`${API_URL}/jobs/${id}/toggle`, {
-        method: "PATCH"
+        method: "PATCH",
+        headers: getAuthHeaders()
       });
       const updatedJob = await res.json();
       
-      setJobs(prev => prev.map(j => j._id === id ? updatedJob : j));
+      if (updatedJob._id) setJobs(prev => prev.map(j => j._id === id ? updatedJob : j));
     } catch (err) {
       console.error("Error toggling job status:", err);
     }
@@ -181,10 +220,9 @@ export default function Dashboard() {
     try {
       await fetch(`${API_URL}/interviews/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ status })
       });
-      
       setInterviews(prev => prev.map(x => x._id === id ? { ...x, status } : x));
     } catch (err) {
       console.error("Error updating interview:", err);
@@ -235,94 +273,66 @@ export default function Dashboard() {
             <h1 className="text-lg font-semibold text-gray-800">
               {navItems.find(n => n.id === activeTab)?.icon} {navItems.find(n => n.id === activeTab)?.label}
             </h1>
-            <p className="text-xs text-gray-400">Tuesday, March 24, 2026</p>
           </div>
           <div className="flex items-center gap-3">
-            {activeTab === "jobs" && (
-              <button onClick={() => setShowJobModal(true)} className={btnPrimary}>+ Post Job</button>
-            )}
-            {activeTab === "interviews" && (
-              <button onClick={() => setShowInterviewModal(true)} className={btnPrimary}>+ Schedule Interview</button>
-            )}
+            {activeTab === "jobs" && (<button onClick={() => setShowJobModal(true)} className={btnPrimary}>+ Post Job</button>)}
+            {activeTab === "interviews" && (<button onClick={() => setShowInterviewModal(true)} className={btnPrimary}>+ Schedule Interview</button>)}
             <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">HR</div>
           </div>
         </header>
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-6">
-
-          {/* OVERVIEW */}
-          {activeTab === "overview" && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {stats.map(s => (
-                  <div key={s.label} className={`border rounded-2xl p-5 ${s.color} flex items-center gap-4`}>
-                    <div className="text-3xl">{s.icon}</div>
-                    <div>
-                      <div className="text-2xl font-bold text-gray-800">{s.value}</div>
-                      <div className="text-xs text-gray-500">{s.label}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Recent Applications */}
-                <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                  <h2 className="font-semibold text-gray-800 mb-4">Recent Applications</h2>
-                  <div className="space-y-3">
-                    {applications.slice(0, 4).map(a => (
-                      <div key={a._id} className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">{a.name}</p>
-                          <p className="text-xs text-gray-400">{a.job} &middot; {a.university}</p>
-                        </div>
-                        <Badge status={a.status} />
+            {/* OVERVIEW */}
+            {activeTab === "overview" && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {stats.map(s => (
+                    <div key={s.label} className={`border rounded-2xl p-5 ${s.color} flex items-center gap-4`}>
+                      <div className="text-3xl">{s.icon}</div>
+                      <div>
+                        <div className="text-2xl font-bold text-gray-800">{s.value}</div>
+                        <div className="text-xs text-gray-500">{s.label}</div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Upcoming Interviews */}
-                <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                  <h2 className="font-semibold text-gray-800 mb-4">Upcoming Interviews</h2>
-                  <div className="space-y-3">
-                    {interviews.filter(i => i.status === "Scheduled").map(i => (
-                      <div key={i._id} className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">{i.candidateName}</p>
-                          <p className="text-xs text-gray-400">{i.job} &middot; {i.date} at {i.time}</p>
-                        </div>
-                        <span className="text-xs text-purple-600 font-medium bg-purple-50 px-2 py-1 rounded-full">{i.mode}</span>
-                      </div>
-                    ))}
-                    {interviews.length === 0 && <p className="text-sm text-gray-400">No interviews scheduled.</p>}
-                  </div>
-                </div>
-              </div>
-
-              {/* Active Jobs */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                <h2 className="font-semibold text-gray-800 mb-4">Active Job Openings</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {jobs.filter(j => j.status === "Open").map(j => (
-                    <div key={j._id} className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition">
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-medium text-gray-800 text-sm">{j.title}</h3>
-                        <Badge status={j.status} />
-                      </div>
-                      <p className="text-xs text-gray-500">{j.department} &middot; {j.location}</p>
-                      <p className="text-xs text-gray-400 mt-1">{j.applicants} applicants &middot; {j.type}</p>
                     </div>
                   ))}
                 </div>
+                {/* Grid for recent activity */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                    <h2 className="font-semibold text-gray-800 mb-4">Recent Applications</h2>
+                    <div className="space-y-3">
+                      {applications.slice(0, 4).map(a => (
+                        <div key={a._id} className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">{a.name}</p>
+                            <p className="text-xs text-gray-400">{a.job}</p>
+                          </div>
+                          <Badge status={a.status} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                    <h2 className="font-semibold text-gray-800 mb-4">Upcoming Interviews</h2>
+                    <div className="space-y-3">
+                      {interviews.filter(i => i.status === "Scheduled").map(i => (
+                        <div key={i._id} className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">{i.candidateName}</p>
+                            <p className="text-xs text-gray-400">{i.date} at {i.time}</p>
+                          </div>
+                          <span className="text-xs text-purple-600 font-medium bg-purple-50 px-2 py-1 rounded-full">{i.mode}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* JOB OPENINGS */}
-          {activeTab === "jobs" && (
-            <div className="space-y-4">
+            {/* JOBS */}
+            {activeTab === "jobs" && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {jobs.map(j => (
                   <div key={j._id} className="bg-white border border-gray-200 rounded-2xl p-5 hover:shadow-md transition">
@@ -335,246 +345,277 @@ export default function Dashboard() {
                     </div>
                     <div className="space-y-1 text-xs text-gray-500 mb-4">
                       <p>📍 {j.location}</p>
-                      <p>🕐 {j.type}</p>
                       <p>📅 Posted: {formatDate(j.posted)}</p>
-                      <p>👥 {j.applicants} applicants</p>
                     </div>
-                    <button
-                      onClick={() => toggleJobStatus(j._id)}
-                      className={`w-full text-xs py-1.5 rounded-lg font-medium transition ${
-                        j.status === "Open"
-                          ? "bg-red-50 text-red-600 hover:bg-red-100"
-                          : "bg-green-50 text-green-600 hover:bg-green-100"
-                      }`}
-                    >
+                    <button onClick={() => toggleJobStatus(j._id)} className={`w-full text-xs py-1.5 rounded-lg font-medium transition ${j.status === "Open" ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-green-50 text-green-600 hover:bg-green-100"}`}>
                       {j.status === "Open" ? "Close Position" : "Reopen Position"}
                     </button>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* APPLICATIONS */}
-          {activeTab === "applications" && (
-            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-              <div className="px-5 py-4 border-b flex items-center justify-between">
-                <h2 className="font-semibold text-gray-800">All Applications ({filteredApps.length})</h2>
-                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none">
-                  {["All", "Under Review", "Shortlisted", "Interview Scheduled", "Selected", "Rejected"].map(s => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                    <tr>
-                      <th className="px-5 py-3 text-left">Candidate</th>
-                      <th className="px-5 py-3 text-left">Job</th>
-                      <th className="px-5 py-3 text-left">University</th>
-                      <th className="px-5 py-3 text-left">GPA</th>
-                      <th className="px-5 py-3 text-left">Applied</th>
-                      <th className="px-5 py-3 text-left">Status</th>
-                      <th className="px-5 py-3 text-left">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredApps.map(a => (
-                      <tr key={a._id} className="hover:bg-gray-50">
-                        <td className="px-5 py-3">
-                          <div className="font-medium text-gray-800">{a.name}</div>
-                          <div className="text-xs text-gray-400">{a.email}</div>
-                        </td>
-                        <td className="px-5 py-3 text-gray-600">{a.job}</td>
-                        <td className="px-5 py-3 text-gray-600">{a.university}</td>
-                        <td className="px-5 py-3 text-gray-600">{a.gpa}</td>
-                        <td className="px-5 py-3 text-gray-400 text-xs">{formatDate(a.appliedDate)}</td>
-                        <td className="px-5 py-3"><Badge status={a.status} /></td>
-                        <td className="px-5 py-3">
-                          <button onClick={() => setSelectedCandidate(a)} className="text-blue-600 hover:underline text-xs">View</button>
-                        </td>
+            {/* APPLICATIONS */}
+            {activeTab === "applications" && (
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                <div className="px-5 py-4 border-b flex items-center justify-between">
+                  <h2 className="font-semibold text-gray-800">All Applications ({filteredApps.length})</h2>
+                  <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none">
+                    {["All", "Under Review", "Shortlisted", "Interview Scheduled", "Selected", "Rejected"].map(s => (<option key={s}>{s}</option>))}
+                  </select>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                      <tr>
+                        <th className="px-5 py-3 text-left">Candidate</th>
+                        <th className="px-5 py-3 text-left">Job</th>
+                        <th className="px-5 py-3 text-left">Status</th>
+                        <th className="px-5 py-3 text-left">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredApps.map(a => (
+                        <tr key={a._id} className="hover:bg-gray-50">
+                          <td className="px-5 py-3 font-medium text-gray-800">{a.name}</td>
+                          <td className="px-5 py-3 text-gray-600">{a.job}</td>
+                          <td className="px-5 py-3"><Badge status={a.status} /></td>
+                          <td className="px-5 py-3"><button onClick={() => setSelectedCandidate(a)} className="text-blue-600 hover:underline text-xs">View</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* SHORTLIST */}
-          {activeTab === "shortlist" && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-500">{shortlisted.length} candidates shortlisted</p>
+            {/* SHORTLIST */}
+            {activeTab === "shortlist" && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {shortlisted.map(a => (
-                  <div key={a._id} className="bg-white border border-gray-200 rounded-2xl p-5 hover:shadow-md transition">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700">
-                        {a.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">{a.name}</p>
-                        <p className="text-xs text-gray-400">{a.university}</p>
-                      </div>
-                    </div>
-                    <div className="text-xs text-gray-500 space-y-1 mb-3">
-                      <p>💼 {a.job}</p>
-                      <p>🎓 GPA: {a.gpa}</p>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Badge status={a.status} />
-                      <div className="flex gap-1">
-                        <button onClick={() => updateStatus(a._id, "Selected")} className="text-xs bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1 rounded-lg transition">Select</button>
-                        <button onClick={() => updateStatus(a._id, "Rejected")} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded-lg transition">Reject</button>
-                      </div>
+                  <div key={a._id} className="bg-white border border-gray-200 rounded-2xl p-5">
+                    <p className="font-semibold">{a.name}</p>
+                    <Badge status={a.status} />
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={() => updateStatus(a._id, "Selected")} className="text-xs bg-green-50 text-green-600 px-2 py-1 rounded">Select</button>
+                      <button onClick={() => updateStatus(a._id, "Rejected")} className="text-xs bg-red-50 text-red-600 px-2 py-1 rounded">Reject</button>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* INTERVIEWS */}
-          {activeTab === "interviews" && (
-            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
-                    <tr>
-                      <th className="px-5 py-3 text-left">Candidate</th>
-                      <th className="px-5 py-3 text-left">Job</th>
-                      <th className="px-5 py-3 text-left">Date & Time</th>
-                      <th className="px-5 py-3 text-left">Interviewer</th>
-                      <th className="px-5 py-3 text-left">Mode</th>
-                      <th className="px-5 py-3 text-left">Status</th>
-                      <th className="px-5 py-3 text-left">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {interviews.map(i => (
-                      <tr key={i._id} className="hover:bg-gray-50">
-                        <td className="px-5 py-3 font-medium text-gray-800">{i.candidateName}</td>
-                        <td className="px-5 py-3 text-gray-600">{i.job}</td>
-                        <td className="px-5 py-3 text-gray-600">{i.date} <span className="text-gray-400">at</span> {i.time}</td>
-                        <td className="px-5 py-3 text-gray-600">{i.interviewer}</td>
-                        <td className="px-5 py-3">
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                            i.mode === "Video Call" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"
-                          }`}>{i.mode}</span>
-                        </td>
-                        <td className="px-5 py-3"><Badge status={i.status} /></td>
-                        <td className="px-5 py-3">
-                          <div className="flex gap-1">
-                            <button onClick={() => updateInterviewStatus(i._id, "Completed")} className="text-xs bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1 rounded-lg">Done</button>
-                            <button onClick={() => updateInterviewStatus(i._id, "Cancelled")} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded-lg">Cancel</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {interviews.length === 0 && <p className="text-sm text-gray-400 text-center py-10">No interviews yet. Schedule one!</p>}
+            {/* INTERVIEWS */}
+            {activeTab === "interviews" && (
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-x-auto">
+                 <table className="w-full text-sm">
+                   <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                     <tr>
+                       <th className="px-5 py-3 text-left">Candidate</th>
+                       <th className="px-5 py-3 text-left">Date</th>
+                       <th className="px-5 py-3 text-left">Status</th>
+                       <th className="px-5 py-3 text-left">Action</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-gray-100">
+                     {interviews.map(i => (
+                       <tr key={i._id}>
+                         <td className="px-5 py-3">{i.candidateName}</td>
+                         <td className="px-5 py-3">{i.date} at {i.time}</td>
+                         <td className="px-5 py-3"><Badge status={i.status} /></td>
+                         <td className="px-5 py-3">
+                           <button onClick={() => updateInterviewStatus(i._id, "Completed")} className="text-xs bg-green-50 text-green-600 px-2 py-1 rounded mr-2">Done</button>
+                         </td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
               </div>
-            </div>
-          )}
-
+            )}
         </main>
       </div>
 
-      {/* POST JOB MODAL */}
-      {showJobModal && (
-        <Modal title="Post New Job Opening" onClose={() => setShowJobModal(false)}>
-          <div className="space-y-3">
-            <div><label className={labelCls}>Job Title *</label><input className={inputCls} value={jobForm.title} onChange={e => setJobForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Software Engineer" /></div>
-            <div><label className={labelCls}>Department *</label><input className={inputCls} value={jobForm.department} onChange={e => setJobForm(p => ({ ...p, department: e.target.value }))} placeholder="e.g. Engineering" /></div>
-            <div><label className={labelCls}>Location</label><input className={inputCls} value={jobForm.location} onChange={e => setJobForm(p => ({ ...p, location: e.target.value }))} placeholder="e.g. Remote" /></div>
-            <div>
-              <label className={labelCls}>Type</label>
-              <select className={inputCls} value={jobForm.type} onChange={e => setJobForm(p => ({ ...p, type: e.target.value }))}>
-                {["Full-time", "Part-time", "Internship", "Contract"].map(t => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-            <div><label className={labelCls}>Description</label><textarea className={inputCls + " resize-none"} rows={3} value={jobForm.description} onChange={e => setJobForm(p => ({ ...p, description: e.target.value }))} placeholder="Job responsibilities..." /></div>
-            <div className="flex gap-2 pt-2">
-              <button onClick={postJob} className={btnPrimary}>Post Job</button>
-              <button onClick={() => setShowJobModal(false)} className={btnSecondary}>Cancel</button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {/* Modals (Kept standard) */}
+      {/* ------------------- POST JOB MODAL ------------------- */}
+{showJobModal && (
+  <Modal title="Post New Job Opening" onClose={() => setShowJobModal(false)}>
+    <div className="space-y-3">
+      {/* Title */}
+      <div>
+        <label className={labelCls}>Job Title *</label>
+        <input
+          className={inputCls}
+          placeholder="e.g. Software Engineer"
+          value={jobForm.title}
+          onChange={e => setJobForm(p => ({ ...p, title: e.target.value }))}
+        />
+      </div>
 
-      {/* SCHEDULE INTERVIEW MODAL */}
-      {showInterviewModal && (
-        <Modal title="Schedule Interview" onClose={() => setShowInterviewModal(false)}>
-          <div className="space-y-3">
-            <div>
-              <label className={labelCls}>Candidate *</label>
-              <select className={inputCls} value={intForm.candidateName} onChange={e => setIntForm(p => ({ ...p, candidateName: e.target.value }))}>
-                <option value="">Select candidate</option>
-                {applications.map(a => <option key={a._id}>{a.name}</option>)}
-              </select>
-            </div>
-            <div><label className={labelCls}>Job Role</label><input className={inputCls} value={intForm.job} onChange={e => setIntForm(p => ({ ...p, job: e.target.value }))} placeholder="e.g. Frontend Developer" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className={labelCls}>Date *</label><input type="date" className={inputCls} value={intForm.date} onChange={e => setIntForm(p => ({ ...p, date: e.target.value }))} /></div>
-              <div><label className={labelCls}>Time</label><input type="time" className={inputCls} value={intForm.time} onChange={e => setIntForm(p => ({ ...p, time: e.target.value }))} /></div>
-            </div>
-            <div><label className={labelCls}>Interviewer</label><input className={inputCls} value={intForm.interviewer} onChange={e => setIntForm(p => ({ ...p, interviewer: e.target.value }))} placeholder="e.g. Jane Doe" /></div>
-            <div>
-              <label className={labelCls}>Mode</label>
-              <select className={inputCls} value={intForm.mode} onChange={e => setIntForm(p => ({ ...p, mode: e.target.value }))}>
-                {["Video Call", "In-Person", "Phone"].map(m => <option key={m}>{m}</option>)}
-              </select>
-            </div>
-            <div><label className={labelCls}>Meeting Link (optional)</label><input className={inputCls} value={intForm.link} onChange={e => setIntForm(p => ({ ...p, link: e.target.value }))} placeholder="https://meet.google.com/..." /></div>
-            <div className="flex gap-2 pt-2">
-              <button onClick={scheduleInterview} className={btnPrimary}>Schedule</button>
-              <button onClick={() => setShowInterviewModal(false)} className={btnSecondary}>Cancel</button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {/* Department */}
+      <div>
+        <label className={labelCls}>Department *</label>
+        <input
+          className={inputCls}
+          placeholder="e.g. Engineering"
+          value={jobForm.department}
+          onChange={e => setJobForm(p => ({ ...p, department: e.target.value }))}
+        />
+      </div>
 
-      {/* CANDIDATE DETAIL MODAL */}
+      {/* Location */}
+      <div>
+        <label className={labelCls}>Location</label>
+        <input
+          className={inputCls}
+          placeholder="e.g. Remote, New York, London"
+          value={jobForm.location}
+          onChange={e => setJobForm(p => ({ ...p, location: e.target.value }))}
+        />
+      </div>
+
+      {/* Type (Dropdown) */}
+      <div>
+        <label className={labelCls}>Employment Type</label>
+        <select
+          className={inputCls}
+          value={jobForm.type}
+          onChange={e => setJobForm(p => ({ ...p, type: e.target.value }))}
+        >
+          <option value="Full-time">Full-time</option>
+          <option value="Part-time">Part-time</option>
+          <option value="Internship">Internship</option>
+          <option value="Contract">Contract</option>
+        </select>
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className={labelCls}>Job Description</label>
+        <textarea
+          className={`${inputCls} resize-none`}
+          rows={3}
+          placeholder="Describe responsibilities, requirements..."
+          value={jobForm.description}
+          onChange={e => setJobForm(p => ({ ...p, description: e.target.value }))}
+        />
+      </div>
+
+      {/* Buttons */}
+      <div className="flex gap-2 pt-2">
+        <button onClick={postJob} className={btnPrimary}>Post Job</button>
+        <button onClick={() => setShowJobModal(false)} className={btnSecondary}>Cancel</button>
+      </div>
+    </div>
+  </Modal>
+)}
+
+{/* ------------------- SCHEDULE INTERVIEW MODAL ------------------- */}
+{showInterviewModal && (
+  <Modal title="Schedule Interview" onClose={() => setShowInterviewModal(false)}>
+    <div className="space-y-3">
+      {/* Candidate Name (Select from applications) */}
+      <div>
+        <label className={labelCls}>Candidate *</label>
+        <select
+          className={inputCls}
+          value={intForm.candidateName}
+          onChange={e => setIntForm(p => ({ ...p, candidateName: e.target.value }))}
+        >
+          <option value="">Select candidate</option>
+          {applications.map(a => (
+            <option key={a._id} value={a.name}>{a.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Job Role */}
+      <div>
+        <label className={labelCls}>Job Role</label>
+        <input
+          className={inputCls}
+          placeholder="e.g. Frontend Developer"
+          value={intForm.job}
+          onChange={e => setIntForm(p => ({ ...p, job: e.target.value }))}
+        />
+      </div>
+
+      {/* Date & Time Grid */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Date *</label>
+          <input
+            type="date"
+            className={inputCls}
+            value={intForm.date}
+            onChange={e => setIntForm(p => ({ ...p, date: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Time</label>
+          <input
+            type="time"
+            className={inputCls}
+            value={intForm.time}
+            onChange={e => setIntForm(p => ({ ...p, time: e.target.value }))}
+          />
+        </div>
+      </div>
+
+      {/* Interviewer */}
+      <div>
+        <label className={labelCls}>Interviewer</label>
+        <input
+          className={inputCls}
+          placeholder="e.g. Jane Doe (HR Manager)"
+          value={intForm.interviewer}
+          onChange={e => setIntForm(p => ({ ...p, interviewer: e.target.value }))}
+        />
+      </div>
+
+      {/* Mode (Dropdown) */}
+      <div>
+        <label className={labelCls}>Mode</label>
+        <select
+          className={inputCls}
+          value={intForm.mode}
+          onChange={e => setIntForm(p => ({ ...p, mode: e.target.value }))}
+        >
+          <option value="Video Call">Video Call</option>
+          <option value="In-Person">In-Person</option>
+          <option value="Phone">Phone</option>
+        </select>
+      </div>
+
+      {/* Meeting Link */}
+      <div>
+        <label className={labelCls}>Meeting Link (optional)</label>
+        <input
+          className={inputCls}
+          placeholder="https://meet.google.com/..."
+          value={intForm.link}
+          onChange={e => setIntForm(p => ({ ...p, link: e.target.value }))}
+        />
+      </div>
+
+      {/* Buttons */}
+      <div className="flex gap-2 pt-2">
+        <button onClick={scheduleInterview} className={btnPrimary}>Schedule</button>
+        <button onClick={() => setShowInterviewModal(false)} className={btnSecondary}>Cancel</button>
+      </div>
+    </div>
+  </Modal>
+)}
+      
+
       {selectedCandidate && (
-        <Modal title="Candidate Profile" onClose={() => setSelectedCandidate(null)}>
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xl font-bold">
-                {selectedCandidate.name.charAt(0)}
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-800">{selectedCandidate.name}</h3>
-                <p className="text-sm text-gray-500">{selectedCandidate.email}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-gray-50 rounded-xl p-3"><p className="text-xs text-gray-400">Applied For</p><p className="font-medium text-gray-700">{selectedCandidate.job}</p></div>
-              <div className="bg-gray-50 rounded-xl p-3"><p className="text-xs text-gray-400">University</p><p className="font-medium text-gray-700">{selectedCandidate.university}</p></div>
-              <div className="bg-gray-50 rounded-xl p-3"><p className="text-xs text-gray-400">GPA</p><p className="font-medium text-gray-700">{selectedCandidate.gpa}</p></div>
-              <div className="bg-gray-50 rounded-xl p-3"><p className="text-xs text-gray-400">Applied Date</p><p className="font-medium text-gray-700">{formatDate(selectedCandidate.appliedDate)}</p></div>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-600 mb-2">Update Status</p>
-              <div className="flex flex-wrap gap-2">
-                {["Under Review", "Shortlisted", "Interview Scheduled", "Selected", "Rejected"].map(s => (
-                  <button
-                    key={s}
-                    onClick={() => updateStatus(selectedCandidate._id, s)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition font-medium ${
-                      selectedCandidate.status === s
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="pt-2">
-              <Badge status={selectedCandidate.status} />
+        <Modal title="Candidate" onClose={() => setSelectedCandidate(null)}>
+          <div className="space-y-2">
+            <h3 className="font-bold text-lg">{selectedCandidate.name}</h3>
+            <p className="text-sm text-gray-500">{selectedCandidate.email}</p>
+            <div className="flex flex-wrap gap-2 mt-4">
+               {["Under Review", "Shortlisted", "Selected", "Rejected"].map(s => (
+                  <button key={s} onClick={() => updateStatus(selectedCandidate._id, s)} className={`text-xs px-3 py-1.5 rounded-full border ${selectedCandidate.status === s ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>{s}</button>
+               ))}
             </div>
           </div>
         </Modal>

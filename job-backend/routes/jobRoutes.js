@@ -2,11 +2,13 @@
 const express = require("express");
 const router = express.Router();
 const Job = require("../models/Job");
+const authMiddleware = require("../middleware/authMiddleware");
 
-// Get all jobs
-router.get("/", async (req, res) => {
+// Get all jobs FOR THIS COMPANY
+router.get("/", authMiddleware, async (req, res) => {
   try {
-    const jobs = await Job.find().sort({ posted: -1 });
+    // Filter by company ID
+    const jobs = await Job.find({ company: req.company._id }).sort({ posted: -1 });
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -14,9 +16,12 @@ router.get("/", async (req, res) => {
 });
 
 // Create a new job
-router.post("/", async (req, res) => {
+router.post("/", authMiddleware, async (req, res) => {
   try {
-    const newJob = new Job(req.body);
+    const newJob = new Job({
+      ...req.body,
+      company: req.company._id // Assign to logged-in company
+    });
     const savedJob = await newJob.save();
     res.status(201).json(savedJob);
   } catch (err) {
@@ -24,11 +29,12 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Toggle Job Status (Open/Closed)
-router.patch("/:id/toggle", async (req, res) => {
+// Toggle Job Status
+router.patch("/:id/toggle", authMiddleware, async (req, res) => {
   try {
-    const job = await Job.findById(req.params.id);
-    if (!job) return res.status(404).json({ message: "Job not found" });
+    // Ensure the job belongs to the company
+    let job = await Job.findOne({ _id: req.params.id, company: req.company._id });
+    if (!job) return res.status(404).json({ message: "Job not found or unauthorized" });
     
     job.status = job.status === "Open" ? "Closed" : "Open";
     await job.save();

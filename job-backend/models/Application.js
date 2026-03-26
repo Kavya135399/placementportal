@@ -2,10 +2,24 @@
 const mongoose = require("mongoose");
 
 const ApplicationSchema = new mongoose.Schema({
+  // --- NEW FIELD ---
+  // This links the application to a specific company
+  company: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: "Company", 
+    required: true 
+  },
+  // -----------------
+  
   name: { type: String, required: true },
   email: { type: String, required: true },
+  
+  // Link to the specific Job ID
   jobId: { type: mongoose.Schema.Types.ObjectId, ref: "Job" },
-  job: { type: String }, // Store job title for easy display
+  
+  // Store job title for easy display (optional if you populate jobId)
+  job: { type: String }, 
+  
   university: { type: String },
   gpa: { type: String },
   appliedDate: { type: Date, default: Date.now },

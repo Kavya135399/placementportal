@@ -1,7 +1,15 @@
-// models/Interview.js
 const mongoose = require("mongoose");
 
 const InterviewSchema = new mongoose.Schema({
+  // --- NEW FIELD ---
+  // Links this interview to a specific company
+  company: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: "Company", 
+    required: true 
+  },
+  // -----------------
+
   candidateName: { type: String, required: true },
   job: { type: String },
   applicationId: { type: mongoose.Schema.Types.ObjectId, ref: "Application" },

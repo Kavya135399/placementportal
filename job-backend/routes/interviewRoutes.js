@@ -3,23 +3,23 @@ const express = require("express");
 const router = express.Router();
 const Interview = require("../models/Interview");
 const Application = require("../models/Application");
+const authMiddleware = require("../middleware/authMiddleware");
 
-// Get all interviews
-router.get("/", async (req, res) => {
+// Get all interviews FOR THIS COMPANY
+router.get("/", authMiddleware, async (req, res) => {
   try {
-    const interviews = await Interview.find().sort({ date: 1 });
+    const interviews = await Interview.find({ company: req.company._id }).sort({ date: 1 });
     res.json(interviews);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Schedule interview & update application status
-router.post("/", async (req, res) => {
+// Schedule interview
+router.post("/", authMiddleware, async (req, res) => {
   const { applicationId, candidateName, job, date, time, interviewer, mode, link } = req.body;
   
   try {
-    // 1. Create Interview
     const newInterview = new Interview({
       candidateName,
       job,
@@ -28,13 +28,17 @@ router.post("/", async (req, res) => {
       time,
       interviewer,
       mode,
-      link
+      link,
+      company: req.company._id // Assign to company
     });
     await newInterview.save();
 
-    // 2. Update Application Status
+    // Update Application Status (ensure it belongs to this company)
     if (applicationId) {
-      await Application.findByIdAndUpdate(applicationId, { status: "Interview Scheduled" });
+      await Application.findOneAndUpdate(
+        { _id: applicationId, company: req.company._id }, 
+        { status: "Interview Scheduled" }
+      );
     }
 
     res.status(201).json(newInterview);
@@ -43,11 +47,16 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Update interview status (Done/Cancelled)
-router.patch("/:id", async (req, res) => {
+// Update interview status
+router.patch("/:id", authMiddleware, async (req, res) => {
   const { status } = req.body;
   try {
-    const updated = await Interview.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    const updated = await Interview.findOneAndUpdate(
+      { _id: req.params.id, company: req.company._id }, 
+      { status }, 
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ msg: "Not found" });
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });

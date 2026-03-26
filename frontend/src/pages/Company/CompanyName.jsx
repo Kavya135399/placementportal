@@ -1,21 +1,13 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 
 export default function CompanyName() {
-  const [companyName, setCompanyName] = useState("");
-
-  useEffect(() => {
-    fetchCompany();
-  }, []);
-
-  const fetchCompany = async () => {
-    try {
-      const res = await axios.get("http://localhost:5000/api/company");
-      setCompanyName(res.data.companyName);
-    } catch (err) {
-      console.log("Error fetching company:", err);
-    }
-  };
+const [companyName, setCompanyName] = useState("");
+useEffect(() => {
+  const data = JSON.parse(localStorage.getItem("company"));
+  if (data && data.companyName) {
+    setCompanyName(data.companyName);
+  }
+}, []);
 
   return (
     <span className="font-semibold text-gray-800 text-sm">

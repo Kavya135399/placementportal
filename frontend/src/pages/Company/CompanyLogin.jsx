@@ -18,6 +18,7 @@ export default function CompanyLogin() {
       });
 
       localStorage.setItem("token", res.data.token);
+      localStorage.setItem("company", JSON.stringify(res.data.company));
 
       alert("Login Success ✅");
 
